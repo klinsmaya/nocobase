@@ -24,13 +24,16 @@ MCP Apps 是 MCP 的**扩展（extension）**，不是核心协议的一部分�
 | CSP 结构 | `McpUiResourceCsp = { connectDomains, resourceDomains, frameDomains, baseUriDomains }` |
 | 已废弃扁平键 | `_meta["ui/resourceUri"]`（兼容用，新实现不要产出） |
 
-能力协商在标准 `initialize` 中完成：
+能力协商是 `capabilities.extensions` 下的一个映射（标识符 → 设置对象，`{}` 表示"支持但无设置"）：
 
 ```jsonc
 { "capabilities": { "extensions": {
   "io.modelcontextprotocol/ui": { "mimeTypes": ["text/html;profile=mcp-app"] }
 } } }
 ```
+
+> **协议版本提示（2026-08 更新）**：上式是 `2025-11-25` 及更早的形态，经由 `initialize` 传递 —— 这也是 `@modelcontextprotocol/sdk@1.29.0`（NocoBase 当前解析到的版本，`LATEST_PROTOCOL_VERSION = '2025-11-25'`）today 支持的形态，`extensions` 字段已在其 ClientCapabilities/ServerCapabilities 上就位。
+> 但 `2026-07-28` 修订**移除了 `initialize`**：客户端能力改为随每个请求走 `params._meta["io.modelcontextprotocol/clientCapabilities"]`，服务端改为通过新的 `server/discover` 广告能力。详见 `docs/research/mcp-features-fit.md` 第 0 节。
 
 ### 1.3 `ui/` 命名空间方法
 
@@ -200,7 +203,7 @@ this.app.layoutManager.registerLayout({
 
 | 能力项 | 现状 | 差距 | 难度 |
 |---|---|---|---|
-| MCP Server 端点 / 传输 | ✅ `/api/mcp` StreamableHTTP | 无状态模式无法推 `notifications/resources/updated`；需可选有状态会话 | 低 |
+| MCP Server 端点 / 传输 | ✅ `/api/mcp` StreamableHTTP（无状态） | ~~需可选有状态会话~~ → **判断反转**：`2026-07-28` 主动删除了会话（SEP-2567/2575），无状态即目标形态，NocoBase 的选择是对的。真正要补的是 `subscriptions/listen` 长连接请求 | 低 |
 | OAuth 2.1 / RFC 9728 | ✅ 完整 | scope 需细化到 App 粒度 | 低 |
 | `tools/list`、`tools/call` | ✅ | 未按角色过滤；缓存跨用户 | **中（安全）** |
 | `resources/list`、`resources/read` | ❌ 未实现 | 需新增 resources capability 与 `ui://` 路由 | 中 |
@@ -384,7 +387,7 @@ NocoBase MCP Server → inject(app.callback()) → ACL/数据源 → 结果回�
 
 1. **能力协商**：`initialize` 中声明 `extensions["io.modelcontextprotocol/ui"]`；宿主不支持时**自动降级**为纯文本工具结果（规范明确要求 graceful degradation），不能报错。
 2. **`resources/list` / `resources/read`**：由 `mcpApps` 表驱动；`read` 时按 mode 组装 HTML 并附 `_meta.ui.csp`。需做产物缓存 + 版本失效（现有 `mcpToolsCache` 可作参考，但**务必加入角色维度**）。
-3. **会话模式**：当前 `sessionIdGenerator: undefined` 无状态。若要支持 `notifications/resources/list_changed`（如设计器改动实时反映到已连接宿主），需引入可选的有状态会话与会话存储；建议**保留无状态为默认**（水平扩展友好），有状态作为可选项。
+3. **会话模式（已修正）**：当前 `sessionIdGenerator: undefined` 无状态。**`2026-07-28` 移除了 `initialize` 与 `Mcp-Session-Id`，无状态成为规范要求的形态**，因此不应再规划"有状态会话"。若要把设计器改动实时反映到已连接宿主，正确出口是 `subscriptions/listen`（长连接 POST 响应流，替代旧的 `resources/subscribe` + HTTP GET 流），且其在 OSS 部署下还受限于缺少 pubsub 适配器 —— 见 `mcp-features-fit.md` §2.7。
 4. **多应用/多租户**：`plugin-multi-app-manager` 场景下，`ui://` 命名需带子应用维度，避免跨租户碰撞。
 5. **可观测性**：`auditManager` 已覆盖 `flowModels:*` 等动作；扩展到 `ui/*` 交互与 `tools/call`，形成"模型说了什么 → View 做了什么 → 数据改了什么"的完整链路。
 
@@ -432,7 +435,7 @@ NocoBase MCP Server → inject(app.callback()) → ACL/数据源 → 结果回�
 **开放问题（需要决策）**
 - Mode A 的引导壳体积能否压到可接受范围？内联全部 FlowEngine 运行时是否现实，还是必须允许 `resourceDomains` 指向 NocoBase 源？
 - 富交互区块（拖拽看板、甘特、地图）对 `connect-src`/字体/图片的依赖，是否与"零网络面"目标冲突？
-- 有状态会话是否要做？影响水平扩展与部署形态。
+- ~~有状态会话是否要做？~~ **已由规范回答：不做**（`2026-07-28` 删除会话）。改为：`subscriptions/listen` 何时做？其前置是补齐 Redis pubsub 适配器。
 - 商业化边界：MCP App 引擎属于开源侧还是 Pro 插件（`packages/pro-plugins`）？影响包划分。
 
 ---
