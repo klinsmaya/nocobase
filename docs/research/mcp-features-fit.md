@@ -52,8 +52,39 @@
 
 `ext-tasks` / `ext-auth` **在 npm 上根本不存在**（只有 GitHub 规范仓库）。
 
+**关键澄清：装了 v2 包 ≠ 就在跑 `2026-07-28`。** 据官方迁移指南（`ts.sdk.modelcontextprotocol.io/v2/migration/`），v2 SDK **默认仍是 2025 era 行为**（`legacy: 'stateless'`），采用新协议是**显式 opt-in**，且被拆成两份互不重叠的指南：
+
+| 指南 | 内容 | 可否 codemod |
+|---|---|---|
+| `upgrade-to-v2.html` | 包拆分、import 重写、API 改名 | ✅ `npx @modelcontextprotocol/codemod@latest v1-to-v2 .` |
+| `support-2026-07-28.html` | `createMcpHandler`、MRTR、`versionNegotiation` | ❌ 官方明说"architectural and not codemod-automatable" |
+
+**对 NocoBase 是好消息，有三点：**
+
+1. **`createMcpHandler` 一个端点同时服务两个 era**（"One factory, one endpoint, both eras"），按请求信封自动路由；要拒绝旧协议才用 `{ legacy: 'reject' }`。**不需要二选一。**
+2. **它的语义与 NocoBase 现有实现 1:1 吻合**——指南原话是"builds a fresh server per request and there is no `Mcp-Session-Id`"，而 `mcp-server.ts:87-105` 正是每个 POST 新建 server、`sessionIdGenerator: undefined`、用完 `close()`。**NocoBase 等于已经手写了 `createMcpHandler` 的行为**，迁移是把手写换成官方入口。
+3. **MRTR 写一次两边都能跑**：用 `inputRequired({ inputRequests, requestState })` 写的处理器，在 2025 era 连接上由内建 legacy shim 自动降级成真正的 server→client 请求。所以工作流挂起/恢复的对接**不必等协议切换**。
+
+**迁移时 NocoBase 会踩到的四处具体改动**（都在 `plugin-mcp-server/src/server/mcp-server.ts`）：
+
+| 现状 | v2 | 风险 |
+|---|---|---|
+| `StreamableHTTPServerTransport`（`:31`） | `NodeStreamableHTTPServerTransport`（来自 `@modelcontextprotocol/node`），或直接改用 `createMcpHandler` | 中 |
+| `setRequestHandler(ListToolsRequestSchema, …)`（`:119`、`:135`） | `setRequestHandler('tools/call', …)` 字符串形式 | 低——**`McpSdkModules`（`:13-38`）里那两个 Schema 导入可以整个删掉**，动态导入垫片随之变薄 |
+| `resolveTokenFromExtra(extra)`（`:58-72`）读 `extra.authInfo` / `extra.requestInfo.headers` | `ctx.http?.authInfo` / `ctx.http?.req.headers` | **高（静默失败）**——v2 的 headers 是 Web Standard `Headers`，必须 `.get('authorization')`；现有 `headers.authorization \|\| headers.Authorization` 的方括号取值**会静默返回 undefined**，导致鉴权失效而非报错 |
+| zod `^3.25 \|\| ^4` | **zod ≥ 4.2.0**，且裸 shape `{a: z.string()}` 弃用，须 `z.object({...})` | 中——影响 `crud-tool.ts` 与 workflow-caller 的 schema 构造 |
+
+外加：**Node 20+**；`ProtocolError`（原 `McpError`）/ `SdkError` / `SdkHttpError` 三类错误分离。
+
+**两个与本文其他章节相关的修正：**
+
+- **§4 第 4 步说的"`requestState` 必须自己 HMAC"——SDK 已内建。** 用 `createRequestStateCodec({ key })` + `ServerOptions.requestState.verify`。仍需自己管密钥与轮换，但不用手写 AEAD。
+- **§2.3 Tasks：v2 SDK 并未把 tasks 做成一等公民。** 指南明说 task 词汇"remains exportable but excluded from typed method maps"，要用 custom-method `request()` 配显式 schema。与"npm 上没有 `ext-tasks`"互相印证——**Tasks 扩展目前只能自行实现**。
+
+**一个会咬到 MCP Apps 的坑（可能正是 ext-apps 迁移卡住的原因之一）**：在 2026 era 连接上 **`getClientCapabilities()` 返回 `undefined`**（因为没有 initialize 握手了），客户端身份改从 `ctx.mcpReq.envelope` 读。而 ext-apps 的能力探测恰恰是 `getUiCapability(server.server.getClientCapabilities())`——**这个模式在 2026 era 下直接失效**，必须改读 per-request 信封。自行实现时务必按 `ctx.mcpReq.envelope` 走。
+
 > **修正后的实施策略**：
-> - 新建 MCP 服务端 → 直接用 `@modelcontextprotocol/server@2.0.0`，`2026-07-28` 全套可用。
+> - 新建 MCP 服务端 → 直接用 `@modelcontextprotocol/server@2.0.0`；先跑 2025 era（零行为变化），再用 `createMcpHandler` opt-in `2026-07-28`。
 > - 但**要做 MCP Apps，就得在"用官方 `ext-apps` 助手（被拖回 v1 SDK）"和"在 v2 上手写 `_meta.ui` 表面"之间二选一**。后者工作量其实不大——MCP Apps 服务端侧只是一个 `ui://` 资源 + 两处 `_meta.ui`，真正复杂的沙箱/CSP 逻辑在**宿主**侧，不在服务端。**推荐在 v2 上手写**，避免被 v1 锁死。
 > - NocoBase 现有 `plugin-mcp-server` 基于 v1 `sdk@^1.27.1`，迁移到 v2 是独立的一步，可用官方 codemod 起步。
 
