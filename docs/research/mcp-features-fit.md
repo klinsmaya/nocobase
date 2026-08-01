@@ -18,22 +18,44 @@
 - 所有结果必须带 `resultType`；六类可缓存结果必须带 `ttlMs` + `cacheScope`（SEP-2549）。
 - 错误码重编号：`-32020` HeaderMismatch、`-32021` MissingRequiredClientCapability、`-32022` UnsupportedProtocolVersion。
 
-**事实二：TypeScript SDK 还没跟上。** NocoBase `yarn.lock` 解析到 `@modelcontextprotocol/sdk@1.29.0`，实测该版本：
+**事实二：v2 SDK 换了包名，且已是 2.0.0 GA。**
 
-| 检查项 | 结果 |
-|---|---|
-| `LATEST_PROTOCOL_VERSION` | **`'2025-11-25'`**（不是 `2026-07-28`） |
-| `server/discover` | ❌ 0 处 |
-| `resultType` | ❌ 0 处 |
-| `subscriptions/listen` | ❌ 0 处 |
-| `extensions` on capabilities | ✅ **已有**，`types.js:456` 与 `:534`（ClientCapabilities + ServerCapabilities，`z.record(z.string(), AssertObjectSchema).optional()`） |
-| `tasks/get` | ✅ 2 处（2025-11-25 的实验性核心版，非扩展版） |
-| `elicitation/create` | ✅ 4 处 |
-| `outputSchema` | ✅ 3 处 |
+> ⚠️ **本节曾有一处判断错误，已更正。** 早先的结论是"TS SDK 停在 `2025-11-25`，不要现在追 `2026-07-28`"。那是**查错了包**——`@modelcontextprotocol/sdk` 是 v1 线，v2 拆成了全新的包名。
 
-> **这决定了实施策略**：扩展协商机制（`extensions` 映射）**今天就可用**——SDK 已在两侧能力对象上带了该字段，走 `initialize` 即可。而 `2026-07-28` 的无状态模型需要等 SDK，或自行实现传输层。
->
-> **不要现在就去追 `server/discover`。** 正确做法是：按扩展框架落地 MCP Apps，把协议版本相关的分支收敛到一个薄适配层，等 SDK 跟进再切。
+| 包 | 最新版本 | 说明 |
+|---|---|---|
+| `@modelcontextprotocol/sdk` | `1.30.0` | **v1 线**，`LATEST_PROTOCOL_VERSION = '2025-11-25'`，已废弃 |
+| **`@modelcontextprotocol/server`** | **`2.0.0`** | v2 服务端，GA |
+| **`@modelcontextprotocol/client`** | **`2.0.0`** | v2 客户端，GA |
+| `@modelcontextprotocol/core` | `2.0.0` | v2 共享内核（`server` 的依赖） |
+| `@modelcontextprotocol/codemod` | `2.0.0` | 迁移工具：`npx @modelcontextprotocol/codemod v1-to-v2 .` |
+| Python `mcp` | `2.0.0` | 已 GA（早期资料写的 `2.0.0b1` 已过期） |
+
+实测 `@modelcontextprotocol/server@2.0.0` + `@modelcontextprotocol/core@2.0.0` 的 dist（出现次数）：
+
+| 2026-07-28 特性 | 命中 | | 特性 | 命中 |
+|---|---|---|---|---|
+| `server/discover` | 166 | | `cacheScope` | 184 |
+| `resultType` | 228 | | `ttlMs` | 190 |
+| `subscriptions/listen` | 194 | | `extensions` | 74 |
+| `inputRequests`（MRTR） | 200 | | `Mcp-Method` | 54 |
+| `requestState`（MRTR） | 503 | | `io.modelcontextprotocol/clientCapabilities` | 12 |
+
+协议版本串在 dist 中：`2026-07-28` 出现 842 次，`2025-11-25` 264 次（保留用于向后兼容）。**`2026-07-28` 在 TS 上已完全可用。**
+
+**但有一个真实的断层——MCP Apps 扩展 SDK 还挂在 v1 上：**
+
+```
+@modelcontextprotocol/ext-apps@1.7.5
+  peerDependencies: { "@modelcontextprotocol/sdk": "^1.29.0", ... }
+```
+
+`ext-tasks` / `ext-auth` **在 npm 上根本不存在**（只有 GitHub 规范仓库）。
+
+> **修正后的实施策略**：
+> - 新建 MCP 服务端 → 直接用 `@modelcontextprotocol/server@2.0.0`，`2026-07-28` 全套可用。
+> - 但**要做 MCP Apps，就得在"用官方 `ext-apps` 助手（被拖回 v1 SDK）"和"在 v2 上手写 `_meta.ui` 表面"之间二选一**。后者工作量其实不大——MCP Apps 服务端侧只是一个 `ui://` 资源 + 两处 `_meta.ui`，真正复杂的沙箱/CSP 逻辑在**宿主**侧，不在服务端。**推荐在 v2 上手写**，避免被 v1 锁死。
+> - NocoBase 现有 `plugin-mcp-server` 基于 v1 `sdk@^1.27.1`，迁移到 v2 是独立的一步，可用官方 codemod 起步。
 
 **一处对前文的修正**：`mcp-app-engine.md` 曾把 NocoBase 的 `sessionIdGenerator: undefined`（无状态）列为"需补有状态会话"的缺口。**这个判断在 `2026-07-28` 下反了**——规范主动删除了会话，无状态成了目标形态，NocoBase 的选择反而是对的。真正需要补的是 `subscriptions/listen` 这种**长连接请求**，而非会话。
 
@@ -187,13 +209,14 @@
 
 **第 0 步（1~2 周）— 修缺陷 + 结构化输出。** 上表三项 + `outputSchema`/`structuredContent`。零协议风险，立刻改善现有 MCP 体验。
 
-**第 1 步（3~5 周）— MCP Apps。** 走 `initialize` + `extensions` 协商（SDK 1.29.0 今天就支持）。加 `resources` capability，先用自包含单文件产物跑通一个真实场景。
+**第 1 步（2~3 周）— 迁移到 v2 SDK。**（原计划把这步放在最后"观望"，**已提前**——v2 SDK 已 GA。）把 `plugin-mcp-server` 从 `@modelcontextprotocol/sdk@^1.27.1` 迁到 `@modelcontextprotocol/server@2.0.0`，用 `npx @modelcontextprotocol/codemod v1-to-v2 .` 起步。`McpSdkModules`（`mcp-server.ts:13-38`）是天然的收敛点，目前只导入了 4 个符号，迁移面很小。
+收益立竿见影：NocoBase 的无状态实现（`sessionIdGenerator: undefined`）**正是 v2 的目标形态**，迁过去反而更顺；同时白拿 `Mcp-Method` 头路由、`ttlMs`/`cacheScope` 响应缓存。
 
-**第 2 步（4~6 周）— Tasks 扩展 + 工作流触发器。** 修完任务状态机后接 `tasks/*`；同时注册 `mcp` 触发器，把工作流暴露成工具。人工节点走**路线 A**（复用 MCP Apps 渲染 Formily 表单）。
+**第 2 步（3~5 周）— MCP Apps。** 在 v2 上**手写** `_meta.ui` 表面，不要引 `ext-apps@1.7.5`（它会把依赖拖回 v1 `sdk@^1.29.0`）。加 `resources` capability，先用自包含单文件产物跑通一个真实场景。
 
-**第 3 步（3~4 周）— Resources + scope 强制细化。**
+**第 3 步（4~6 周）— Tasks 扩展 + 工作流触发器。** 修完任务状态机后接 `tasks/*`（注意：npm 上**没有** `ext-tasks` 包，需按规范自行实现）；同时注册 `mcp` 触发器，把工作流暴露成工具。人工节点走**路线 A**（复用 MCP Apps 渲染 Formily 表单）。
 
-**第 4 步（观望）— `2026-07-28` 迁移。** 等 TS SDK 支持 `server/discover`/MRTR/`subscriptions/listen`。**现在就该做的准备**：把协议版本相关逻辑收敛到单一适配层，不要散落到各处；`McpSdkModules`（`mcp-server.ts:13-38`）已经是天然的收敛点。
+**第 4 步（3~4 周）— Resources + scope 强制细化 + MRTR。** v2 SDK 已带 MRTR（`inputRequests`/`requestState`），可与工作流挂起/恢复对接。**安全提醒**：`requestState` 是攻击者可控的，必须 HMAC/AEAD 保护并绑定主体与 TTL，否则是越权与跨用户重放通道。
 
 ---
 
@@ -201,7 +224,7 @@
 
 1. **NocoBase 与 MCP 的契合点不是"AI 调用 API"，而是三处结构同构**：页面引擎 ↔ MCP Apps、异步任务 ↔ Tasks 扩展、工作流挂起/恢复 ↔ MRTR。这三处都是 NocoBase 已有的成熟子系统，不是要新造的东西。
 2. **但三处都有"最后一公里"缺陷**——任务状态机、人工表单不可移植、scope 不强制。**这些缺陷本身与 MCP 无关，修了对 NocoBase 自身也是净收益**，这让第 0 步的投入很容易论证。
-3. **不要现在追 `2026-07-28`。** 规范 4 天前才发布，SDK 停在 `2025-11-25`。按扩展框架做 MCP Apps 是当下唯一既标准又可落地的路径。
+3. **~~不要现在追 `2026-07-28`~~ → 应当现在就迁。** v2 SDK 已作为新包名（`@modelcontextprotocol/server@2.0.0`）GA，`2026-07-28` 全套特性可用。真正的断层不在核心协议，而在 **MCP Apps 扩展 SDK（`ext-apps@1.7.5`）仍 peer-depend 于 v1 `sdk@^1.29.0`**——所以 Apps 要在 v2 上手写，别引那个包。
 
 ---
 
