@@ -61,6 +61,50 @@ View 本身是一个**运行在 iframe 里的 MCP Client**，通过 postMessage 
 - **资源预声明**：宿主在连接建立阶段即通过 `resources/list` 拿到全部 UI 模板，可在执行前审查。
 - **可审计**：所有 View↔Host 交互都是结构化 JSON-RPC，可完整日志化。
 
+### 1.5.1 官方 `ext-apps` SDK 的 v2 迁移已僵持 —— 结论：自行实现服务端 helper
+
+调研了 `modelcontextprotocol/ext-apps` 全部四次 v2 迁移尝试（2026-04 → 2026-07，**零合并**）。这直接决定 NocoBase 该不该依赖它。
+
+**三种互斥设计，争的是同一件事：ext-apps 的 JSON-RPC 生命周期从哪来。**
+
+| | 设计 | PR | 状态 | 判定 |
+|---|---|---|---|---|
+| A | `App extends Client`、`AppBridge extends Server`（v2 角色类） | #710 | 作者自行关闭 2026-07-29 | **已死** |
+| B | `App`/`AppBridge extends Protocol<BaseContext>`（SDK 公共基类） | #614 → #712 → **#720** | 开放草稿 | 足迹最小 |
+| C | ext-apps 自有 core-only `Protocol`（426 行）+ 结构化接口 | **#719** | 开放草稿 | 完全隔离，但永久自维护 ~674 行 |
+
+**A 是怎么死的（关键机制）**：v2 的具体 `Client`/`Server` 在 `connect()` 时**无条件执行核心 MCP `initialize`**。而 ext-apps 的 iframe 内通道用的是 `ui/initialize` / `ui/notifications/initialized`，已部署的宿主只认后者。于是 #710 的 iframe 通道出现**双重握手**——它自己在代码里标注为 `TEMPORARY INNER-CHANNEL NEGOTIATION`，把 `INNER_MCP_PROTOCOL_VERSION` 钉死在 `2025-11-25` + `versionNegotiation: {mode:'legacy'}`，并指向 issue #708 待解。这是对已部署宿主的**线协议破坏**。
+
+**根因是一句话：iframe 通道不是一个 MCP 会话，而 v2 SDK 没有受支持的方式表达这一点。** 有意思的是，`2026-07-28` 删除 `initialize` 的决定**反过来印证了**"不该把 `initialize` 放到内通道"。
+
+**规范层前置条件仍未解决**：issue **#708「Align MCP Apps capability negotiation with SEP-2133」** 仍开放；驱动性 issue #702 也仍开放。**PR 无法先于 #708 干净落地。**
+
+> 补充事实：`extensions` 字段进 SDK 走的是 **SEP-1724**（不是扩展框架的 SEP-2133）。v2 的 `ClientCapabilities` 已原生带 `extensions`。
+
+**对 NocoBase 的决定性证据 —— 服务端 helper 与这场架构之争完全正交：**
+
+`git log main..pr712 -- src/server/index.ts` **只返回 #710 的 commit** —— 即 Protocol 移植（真正有争议的部分）**一次都没碰过这个文件**。四个候选里有三个把它落在 `+14/−44`（471 → 440/441 行），且**运行时逻辑零变更**，所有删除都是类型放宽、`as any` 或注释。
+
+真正承重的运行时代码 **~60 行，在 v1 与全部四个 v2 PR 之间逐字节相同**：
+
+| 部件 | 行数 | 跨 4 个 PR 的状态 |
+|---|---|---|
+| `registerAppTool` 的 `_meta.ui.resourceUri` ↔ legacy 扁平键归一化 | ~14 | 逐字节相同 |
+| `registerAppResource`（默认 `mimeType`） | 17 | #710/#712/#720 **一行未改** |
+| `getUiCapability`（`extensions?.[EXTENSION_ID]`） | 8 | 函数体处处未改 |
+| `EXTENSION_ID` / `RESOURCE_URI_META_KEY` / `RESOURCE_MIME_TYPE` | 3~5 | 值处处未变 |
+
+导出面是 **14 个名字，v2 前后完全一致**（跨 4 个 PR、3 种架构均未变）。**且在 v2 上手写比 v1 更便宜**：两处 `as any` 消失、5 行条件类型塌缩成 `ToolCallback<InputArgs>`、`ClientCapabilities` 的 `& {extensions?}` 放宽可删（v2 原生带）。净 −31 行。
+
+**两条硬规则：**
+
+1. **`inputSchema` 从第一天就写 `z.object({...})`**，不要用裸 shape。这是这个面上**唯一的源码级破坏性变更**，四个 v2 候选全部拒绝裸 shape。现在就采纳等于预付掉整个 v2 迁移。
+2. **不要手写 `App` / `AppBridge`**。二者约 **4000 行**，那才是被争的代码。**NocoBase 若只对外"提供"App，永远用不到它们**；只有当 NocoBase 想在自己 UI 里"宿主"第三方 MCP App 时才需要——那时应取依赖并用适配器隔离，重写不可行。
+
+**该盯的信号（盯 npm，不要盯仓库）**：`npm view @modelcontextprotocol/ext-apps peerDependencies` —— 当 peer 从 `sdk: ^1.29.x` 翻成 `@modelcontextprotocol/{core,client,server}: ^2.x` 且版本 1.7.x → 2.x，迁移即落地。其次看 #719/#720 哪个先关闭（决定架构），以及 issue #708 是否关闭。
+
+**若现在就用 `ext-apps@1.7.5`（钉在 v1 SDK）的风险敞口**：线协议风险**低**——唯一会破坏已部署宿主的设计 A 已死，两个幸存草稿都刻意保留 v1 线行为。但需立刻把 `sdk` 从 `^1.27.1` 提到 `^1.30.0`（它 peer `^1.29.0`）。未来 v2 大版本会一次性带来：drop zod 3、拒绝裸 shape、Node 18→20、`extra.signal` → `extra.mcpReq.signal`（遍及每个 `AppBridge.on*` 回调）。另注意 #720 **静默删除了 Task 能力断言**（原本会抛 "Tasks are not supported in MCP Apps"，现在直接放行）。
+
 ### 1.6 官方 SDK 形态
 
 - `@modelcontextprotocol/ext-apps` — `App` 类、`PostMessageTransport`（View 侧）
