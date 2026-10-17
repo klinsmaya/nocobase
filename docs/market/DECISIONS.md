@@ -10,6 +10,9 @@ I02 要的是独立协议、schema、profile、参考验证器和 conformance fi
 - `/market/v1` 的路由和写入接口。
 - Multica 适配器、DSH 宿主适配器，以及 LobsterAI 导出。
 - 用 `@nocobase/plugin-workflow` 的 `manual` 指令实现发布审核或 `planHash` 批准。该指令只是本树里的人工节点。
+- 用 `@nocobase/plugin-ai` 的 `AI_WORKFLOW_TASK_STATUS` 充当市场审核。`pending_approval`、`approved`、`rejected` 只描述 AI 员工任务。
+- 把 `PubSubManager` 当成已连接的队列。默认构造不设置 adapter，`publish` 在未连接时直接返回。
+- 只读写 `rolesResourcesScopes` 来做行级可见性。数据权限写入查询的是 `dataSourcesRolesResourcesScopes`。
 - 用 `@nocobase/plugin-audit-logs` 实现市场审计。预设 `deprecated` 已包含该包，包描述写明不要使用。
 - 把 `@nocobase/plugin-license` 的源码写成企业授权已经覆盖。覆盖范围仍是 UNKNOWN。
 - 按方案里的 `v3-develop` 开工。`origin` 没有这个分支。若要更换基线，先改 `docs/market/n01.md` 里的提交。
