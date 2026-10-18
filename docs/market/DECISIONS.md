@@ -8,6 +8,8 @@ I02 的 draft-1 和 I01 的映射字段来自 `klinsmaya/agent-market-protocol` 
 
 N03 的扫描报告、人工审核、不可变 release 和撤销审计在同一个插件里。记录是 `docs/market/n03.md`。
 
+N04 的来源桩、同步作业和能力声明也在这个插件里。记录是 `docs/market/n04.md`。同步只拉元数据，不运行 Agent。
+
 下面各项仍然不进入实现。
 
 - plans、approvals 和 installation projections。

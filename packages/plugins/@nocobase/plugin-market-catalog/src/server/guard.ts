@@ -33,6 +33,11 @@ const STRIPPED_KEYS = [
   'reviewerUserId',
   'secretFindings',
   'piiSignals',
+  'items',
+  'nextCursor',
+  'errorCategory',
+  'errorCode',
+  'errorMessage',
 ];
 
 export type Principal = {
