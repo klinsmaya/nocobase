@@ -23,6 +23,10 @@ export const MARKET_RESOURCES = [
   'marketSources',
   'marketSyncJobs',
   'marketCapabilityDeclarations',
+  'marketPolicies',
+  'marketPlans',
+  'marketPreflights',
+  'marketApprovals',
 ] as const;
 
 export type MarketResourceName = (typeof MARKET_RESOURCES)[number];

@@ -9,6 +9,7 @@
 
 import actions, { Context, Next } from '@nocobase/actions';
 import { fail, findInTenant, isUniqueError, principalFrom, withShape } from './guard';
+import { invalidateActiveApprovals } from './planning';
 import { isReleaseId, PUBLIC_MATERIALS, scanPackage, type PublicMaterial, type ScanResult } from './package-scan';
 import { optionalText, parseEnum, readPositiveInt, readRecord, VISIBILITIES, type Visibility } from './shape';
 
@@ -234,6 +235,7 @@ export async function revokeRelease(ctx: Context, next: Next) {
     if (affected !== 1) {
       fail(ctx, 409, 'Only a published release can be revoked');
     }
+    await invalidateActiveApprovals(ctx, { releaseRowId: row.get('id') }, 'release_revoked');
     await writeAudit(ctx, principal.ncTenantId, row, 'revoke', reason);
     ctx.body = await ctx.db.getRepository('marketReleases').findOne({ filterByTk: row.get('id') });
     await next();

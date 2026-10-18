@@ -19,12 +19,16 @@ import {
   mappingsSchema,
   principalsSchema,
   publishersSchema,
+  plansSchema,
+  policiesSchema,
+  preflightsSchema,
   releasesSchema,
   resourcesSchema,
   reviewsSchema,
   scanReportsSchema,
   sourcesSchema,
   syncJobsSchema,
+  approvalsSchema,
 } from './schema';
 
 function page(schema: Parameters<typeof CatalogPage>[0]['schema']) {
@@ -124,6 +128,30 @@ export class PluginMarketCatalogClient extends Plugin {
       Component: page(capabilitiesSchema),
       aclSnippet: 'pm.market-catalog',
       sort: 13,
+    });
+    this.app.pluginSettingsManager.add('market-catalog.policies', {
+      title: `{{t("Policies", { ns: "${NAMESPACE}" })}}`,
+      Component: page(policiesSchema),
+      aclSnippet: 'pm.market-catalog',
+      sort: 14,
+    });
+    this.app.pluginSettingsManager.add('market-catalog.plans', {
+      title: `{{t("Plans", { ns: "${NAMESPACE}" })}}`,
+      Component: page(plansSchema),
+      aclSnippet: 'pm.market-catalog',
+      sort: 15,
+    });
+    this.app.pluginSettingsManager.add('market-catalog.preflights', {
+      title: `{{t("Preflights", { ns: "${NAMESPACE}" })}}`,
+      Component: page(preflightsSchema),
+      aclSnippet: 'pm.market-catalog',
+      sort: 16,
+    });
+    this.app.pluginSettingsManager.add('market-catalog.approvals', {
+      title: `{{t("Approvals", { ns: "${NAMESPACE}" })}}`,
+      Component: page(approvalsSchema),
+      aclSnippet: 'pm.market-catalog',
+      sort: 17,
     });
   }
 }
