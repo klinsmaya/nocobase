@@ -314,6 +314,52 @@ export const eventsSchema = page({
   ],
 });
 
+export const releasesSchema = page({
+  resource: 'marketReleases',
+  columns: [
+    ['releaseId', 'Release ID'],
+    ['version', 'Version'],
+    ['digest', 'Digest'],
+    ['license', 'License'],
+    ['state', 'State'],
+    ['scanned', 'Scanned'],
+    ['humanReviewed', 'Human reviewed'],
+    ['publisherVerification', 'Publisher verification'],
+  ],
+});
+
+export const scanReportsSchema = page({
+  resource: 'marketScanReports',
+  columns: [
+    ['releaseId', 'Release ID'],
+    ['passed', 'Scan passed'],
+    ['digestOk', 'Digest ok'],
+    ['secretsOk', 'Secrets ok'],
+    ['scriptRisk', 'Script risk'],
+    ['binaryRisk', 'Binary risk'],
+  ],
+});
+
+export const reviewsSchema = page({
+  resource: 'marketReviews',
+  columns: [
+    ['releaseId', 'Release ID'],
+    ['decision', 'Decision'],
+    ['publicMaterial', 'Public material'],
+    ['reviewerUserId', 'Reviewer'],
+  ],
+});
+
+export const auditEventsSchema = page({
+  resource: 'marketAuditEvents',
+  columns: [
+    ['releaseId', 'Release ID'],
+    ['action', 'Action'],
+    ['reason', 'Reason'],
+    ['actorUserId', 'Actor'],
+  ],
+});
+
 export function CatalogPage({ schema }: { schema: ISchema }) {
   return <NocoBaseRecursionField schema={schema} />;
 }

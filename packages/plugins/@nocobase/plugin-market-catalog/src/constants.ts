@@ -16,6 +16,10 @@ export const MARKET_RESOURCES = [
   'marketIdentityMappings',
   'marketOwnershipEvents',
   'marketPrincipals',
+  'marketReleases',
+  'marketScanReports',
+  'marketReviews',
+  'marketAuditEvents',
 ] as const;
 
 export type MarketResourceName = (typeof MARKET_RESOURCES)[number];
