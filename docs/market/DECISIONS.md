@@ -6,9 +6,11 @@ N02 的目录表、草稿 CAS、租户列和身份映射在 `@nocobase/plugin-ma
 
 I02 的 draft-1 和 I01 的映射字段来自 `klinsmaya/agent-market-protocol` 的 PR #1 与 PR #3。协议仓库不在这里。NocoBase 不在加载插件时拉取那份 schema。
 
+N03 的扫描报告、人工审核、不可变 release 和撤销审计在同一个插件里。记录是 `docs/market/n03.md`。
+
 下面各项仍然不进入实现。
 
-- releases、source mappings、plans、approvals 和 installation projections。
+- plans、approvals 和 installation projections。
 - `/market/v1` 的路由和写入接口。N02 使用集合资源动作。
 - Multica 适配器、DSH 宿主适配器，以及 LobsterAI 导出。
 - 用 `@nocobase/plugin-workflow` 的 `manual` 指令实现发布审核或 `planHash` 批准。该指令只是本树里的人工节点。
