@@ -13,7 +13,7 @@ import React from 'react';
 import { generateNTemplate } from '../locale';
 
 type RecordValues = Record<string, unknown>;
-type ActionName = 'create' | 'update' | 'transferOwnership' | 'revise';
+type ActionName = 'create' | 'update' | 'transferOwnership' | 'revise' | 'eligibility';
 
 function column(name: string, title: string): ISchema {
   return {
@@ -41,7 +41,7 @@ function formField(name: string, title: string, component = 'Input'): ISchema {
   };
 }
 
-function useResourceAction(actionName: ActionName, withRevision: boolean) {
+function useResourceAction(actionName: ActionName, revisionField: string | false) {
   const form = useForm();
   const record = useRecord() as RecordValues;
   const { resource, service } = useBlockRequestContext();
@@ -50,8 +50,8 @@ function useResourceAction(actionName: ActionName, withRevision: boolean) {
     async run() {
       await form.submit();
       const values: RecordValues = { ...(form.values as RecordValues) };
-      if (withRevision) {
-        values.expectedRevision = record.revision;
+      if (revisionField) {
+        values.expectedRevision = record[revisionField];
       }
       await resource[actionName]({
         filterByTk: record?.id,
@@ -63,10 +63,25 @@ function useResourceAction(actionName: ActionName, withRevision: boolean) {
   };
 }
 
+function useEligibility() {
+  const record = useRecord() as RecordValues;
+  const { resource, service } = useBlockRequestContext();
+  return {
+    async run() {
+      try {
+        await resource.eligibility({ filterByTk: record?.id });
+      } finally {
+        service?.refresh();
+      }
+    },
+  };
+}
+
 const useCreate = () => useResourceAction('create', false);
-const useSaveDraft = () => useResourceAction('update', true);
+const useSaveDraft = () => useResourceAction('update', 'revision');
 const useTransfer = () => useResourceAction('transferOwnership', false);
-const useRevise = () => useResourceAction('revise', true);
+const useRevise = () => useResourceAction('revise', 'revision');
+const useRevisePolicy = () => useResourceAction('revise', 'policyVersion');
 
 function footer(title: string, useAction: () => { run: () => Promise<void> }): ISchema {
   return {
@@ -110,14 +125,43 @@ function page(options: {
   resource: string;
   columns: Array<[string, string]>;
   create?: { title: string; fields: Array<[string, string, string?]> };
-  row?: { title: string; action: ActionName; fields: Array<[string, string, string?]>; revision: boolean };
+  row?: {
+    title: string;
+    action: ActionName;
+    fields: Array<[string, string, string?]>;
+    revision: boolean;
+    policy?: boolean;
+  };
+  check?: boolean;
 }): ISchema {
   const columns: Record<string, ISchema> = {};
   for (const [name, title] of options.columns) {
     columns[name] = column(name, title);
   }
+  if (options.check) {
+    columns.eligibility = {
+      type: 'void',
+      title: '{{ t("Actions") }}',
+      'x-decorator': 'TableV2.Column.ActionBar',
+      'x-component': 'TableV2.Column',
+      properties: {
+        check: {
+          type: 'void',
+          title: generateNTemplate('Check eligibility'),
+          'x-component': 'Action',
+          'x-component-props': { type: 'link', useAction: useEligibility },
+        },
+      },
+    };
+  }
   if (options.row) {
-    const useAction = options.row.revision ? (options.row.action === 'update' ? useSaveDraft : useRevise) : useTransfer;
+    const useAction = options.row.policy
+      ? useRevisePolicy
+      : options.row.revision
+        ? options.row.action === 'update'
+          ? useSaveDraft
+          : useRevise
+        : useTransfer;
     columns.rowAction = {
       type: 'void',
       title: '{{ t("Actions") }}',
@@ -395,6 +439,74 @@ export const auditEventsSchema = page({
     ['action', 'Action'],
     ['reason', 'Reason'],
     ['actorUserId', 'Actor'],
+  ],
+});
+
+export const policiesSchema = page({
+  resource: 'marketPolicies',
+  columns: [
+    ['policyId', 'Policy ID'],
+    ['policyVersion', 'Policy version'],
+    ['active', 'Active'],
+    ['permissionDigest', 'Permission digest'],
+    ['feeMode', 'Fee mode'],
+  ],
+  create: {
+    title: 'Policies',
+    fields: [
+      ['policyId', 'Policy ID'],
+      ['allowedConsumerTypes', 'Allowed consumer types', 'Input.JSON'],
+      ['permissions', 'Permissions', 'Input.JSON'],
+      ['destinations', 'Destinations', 'Input.JSON'],
+      ['feeMode', 'Fee mode'],
+    ],
+  },
+  row: {
+    title: 'Revise policy',
+    action: 'revise',
+    revision: true,
+    policy: true,
+    fields: [
+      ['permissions', 'Permissions', 'Input.JSON'],
+      ['destinations', 'Destinations', 'Input.JSON'],
+      ['allowedConsumerTypes', 'Allowed consumer types', 'Input.JSON'],
+      ['feeMode', 'Fee mode'],
+    ],
+  },
+});
+
+export const plansSchema = page({
+  resource: 'marketPlans',
+  columns: [
+    ['planId', 'Plan ID'],
+    ['state', 'State'],
+    ['planHash', 'Plan hash'],
+    ['releaseId', 'Release ID'],
+    ['policyVersion', 'Policy version'],
+    ['mappingRevision', 'Mapping revision'],
+  ],
+  check: true,
+});
+
+export const preflightsSchema = page({
+  resource: 'marketPreflights',
+  columns: [
+    ['planId', 'Plan ID'],
+    ['preflightId', 'Preflight ID'],
+    ['status', 'Status'],
+    ['source', 'Preflight source'],
+    ['digest', 'Digest'],
+  ],
+});
+
+export const approvalsSchema = page({
+  resource: 'marketApprovals',
+  columns: [
+    ['planId', 'Plan ID'],
+    ['planHash', 'Plan hash'],
+    ['state', 'State'],
+    ['invalidatedReason', 'Invalidated reason'],
+    ['approverUserId', 'Approver'],
   ],
 });
 

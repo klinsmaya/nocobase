@@ -10,9 +10,11 @@ N03 的扫描报告、人工审核、不可变 release 和撤销审计在同一�
 
 N04 的来源桩、同步作业和能力声明也在这个插件里。记录是 `docs/market/n04.md`。同步只拉元数据，不运行 Agent。
 
+N05 的依赖锁、策略版本、冻结 `planHash`、企业批准和分发资格也在这个插件里。记录是 `docs/market/n05.md`。预检未通过不会冻结计划。事实变化会使旧批准失效。
+
 下面各项仍然不进入实现。
 
-- plans、approvals 和 installation projections。
+- installation projections。
 - `/market/v1` 的路由和写入接口。N02 使用集合资源动作。
 - Multica 适配器、DSH 宿主适配器，以及 LobsterAI 导出。
 - 用 `@nocobase/plugin-workflow` 的 `manual` 指令实现发布审核或 `planHash` 批准。该指令只是本树里的人工节点。

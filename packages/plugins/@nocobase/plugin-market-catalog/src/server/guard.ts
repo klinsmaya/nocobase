@@ -38,6 +38,18 @@ const STRIPPED_KEYS = [
   'errorCategory',
   'errorCode',
   'errorMessage',
+  'planId',
+  'approvalId',
+  'permissionDigest',
+  'preflightDigest',
+  'releaseDigest',
+  'approverUserId',
+  'invalidatedReason',
+  'eligible',
+  'distribution',
+  'reasons',
+  'mappingRevision',
+  'policyVersion',
 ];
 
 export type Principal = {

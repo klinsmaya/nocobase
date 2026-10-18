@@ -30,6 +30,15 @@ import {
   revokeRelease,
   scanRelease,
 } from './publishing';
+import {
+  approvePlan,
+  createPolicy,
+  finalizePlan,
+  planEligibility,
+  recordPreflight,
+  resolvePlan,
+  revisePolicy,
+} from './planning';
 import { createSource, createSyncJob, runSyncJob } from './sources';
 
 export class PluginMarketCatalogServer extends Plugin {
@@ -117,6 +126,30 @@ export class PluginMarketCatalogServer extends Plugin {
       name: 'marketCapabilityDeclarations',
       only: ['list', 'get'],
     });
+    this.app.resourcer.define({
+      name: 'marketPolicies',
+      actions: { create: createPolicy, revise: revisePolicy },
+      only: ['list', 'get', 'create', 'revise'],
+    });
+    this.app.resourcer.define({
+      name: 'marketPlans',
+      actions: {
+        resolve: resolvePlan,
+        finalize: finalizePlan,
+        recordPreflight,
+        approve: approvePlan,
+        eligibility: planEligibility,
+      },
+      only: ['list', 'get', 'resolve', 'finalize', 'recordPreflight', 'approve', 'eligibility'],
+    });
+    this.app.resourcer.define({
+      name: 'marketPreflights',
+      only: ['list', 'get'],
+    });
+    this.app.resourcer.define({
+      name: 'marketApprovals',
+      only: ['list', 'get'],
+    });
     this.app.acl.registerSnippet({
       name: 'pm.market-catalog',
       actions: [
@@ -133,6 +166,10 @@ export class PluginMarketCatalogServer extends Plugin {
         'marketSources:*',
         'marketSyncJobs:*',
         'marketCapabilityDeclarations:*',
+        'marketPolicies:*',
+        'marketPlans:*',
+        'marketPreflights:*',
+        'marketApprovals:*',
       ],
     });
   }

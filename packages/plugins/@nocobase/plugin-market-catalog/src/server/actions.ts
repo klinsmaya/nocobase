@@ -9,6 +9,7 @@
 
 import actions, { Context, Next } from '@nocobase/actions';
 import { fail, findInTenant, isUniqueError, principalFrom, withShape } from './guard';
+import { invalidateActiveApprovals } from './planning';
 import {
   etagFor,
   optionalObject,
@@ -327,6 +328,7 @@ export async function reviseMapping(ctx: Context, next: Next) {
         context: ctx,
         transaction,
       });
+      await invalidateActiveApprovals(ctx, { mappingId: input.mappingId }, 'mapping_revision', transaction);
     });
     ctx.body = await ctx.db.getRepository('marketIdentityMappings').findOne({
       filter: {
