@@ -30,6 +30,7 @@ import {
   revokeRelease,
   scanRelease,
 } from './publishing';
+import { createSource, createSyncJob, runSyncJob } from './sources';
 
 export class PluginMarketCatalogServer extends Plugin {
   async beforeLoad() {
@@ -102,6 +103,20 @@ export class PluginMarketCatalogServer extends Plugin {
       name: 'marketAuditEvents',
       only: ['list', 'get'],
     });
+    this.app.resourcer.define({
+      name: 'marketSources',
+      actions: { create: createSource },
+      only: ['list', 'get', 'create'],
+    });
+    this.app.resourcer.define({
+      name: 'marketSyncJobs',
+      actions: { create: createSyncJob, run: runSyncJob },
+      only: ['list', 'get', 'create', 'run'],
+    });
+    this.app.resourcer.define({
+      name: 'marketCapabilityDeclarations',
+      only: ['list', 'get'],
+    });
     this.app.acl.registerSnippet({
       name: 'pm.market-catalog',
       actions: [
@@ -115,6 +130,9 @@ export class PluginMarketCatalogServer extends Plugin {
         'marketScanReports:*',
         'marketReviews:*',
         'marketAuditEvents:*',
+        'marketSources:*',
+        'marketSyncJobs:*',
+        'marketCapabilityDeclarations:*',
       ],
     });
   }

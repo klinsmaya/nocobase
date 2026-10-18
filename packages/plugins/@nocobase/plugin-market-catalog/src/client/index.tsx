@@ -13,6 +13,7 @@ import { NAMESPACE } from '../constants';
 import {
   CatalogPage,
   auditEventsSchema,
+  capabilitiesSchema,
   draftsSchema,
   eventsSchema,
   mappingsSchema,
@@ -22,6 +23,8 @@ import {
   resourcesSchema,
   reviewsSchema,
   scanReportsSchema,
+  sourcesSchema,
+  syncJobsSchema,
 } from './schema';
 
 function page(schema: Parameters<typeof CatalogPage>[0]['schema']) {
@@ -103,6 +106,24 @@ export class PluginMarketCatalogClient extends Plugin {
       Component: page(auditEventsSchema),
       aclSnippet: 'pm.market-catalog',
       sort: 10,
+    });
+    this.app.pluginSettingsManager.add('market-catalog.sources', {
+      title: `{{t("Sources", { ns: "${NAMESPACE}" })}}`,
+      Component: page(sourcesSchema),
+      aclSnippet: 'pm.market-catalog',
+      sort: 11,
+    });
+    this.app.pluginSettingsManager.add('market-catalog.sync-jobs', {
+      title: `{{t("Sync jobs", { ns: "${NAMESPACE}" })}}`,
+      Component: page(syncJobsSchema),
+      aclSnippet: 'pm.market-catalog',
+      sort: 12,
+    });
+    this.app.pluginSettingsManager.add('market-catalog.capabilities', {
+      title: `{{t("Capability declarations", { ns: "${NAMESPACE}" })}}`,
+      Component: page(capabilitiesSchema),
+      aclSnippet: 'pm.market-catalog',
+      sort: 13,
     });
   }
 }

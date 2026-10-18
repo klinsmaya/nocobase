@@ -350,6 +350,44 @@ export const reviewsSchema = page({
   ],
 });
 
+export const sourcesSchema = page({
+  resource: 'marketSources',
+  columns: [
+    ['sourceKey', 'Source'],
+    ['adapterName', 'Adapter'],
+    ['displayName', 'Display name'],
+  ],
+  create: {
+    title: 'Sources',
+    fields: [
+      ['sourceKey', 'Source'],
+      ['adapterName', 'Adapter'],
+      ['displayName', 'Display name'],
+    ],
+  },
+});
+
+export const syncJobsSchema = page({
+  resource: 'marketSyncJobs',
+  columns: [
+    ['sourceKey', 'Source'],
+    ['kind', 'Job kind'],
+    ['state', 'State'],
+    ['nextCursor', 'Next cursor'],
+    ['errorCategory', 'Error category'],
+    ['errorCode', 'Error code'],
+  ],
+});
+
+export const capabilitiesSchema = page({
+  resource: 'marketCapabilityDeclarations',
+  columns: [
+    ['sourceKey', 'Source'],
+    ['capability', 'Capability'],
+    ['status', 'Status'],
+  ],
+});
+
 export const auditEventsSchema = page({
   resource: 'marketAuditEvents',
   columns: [
