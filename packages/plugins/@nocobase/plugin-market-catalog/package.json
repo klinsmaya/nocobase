@@ -1,0 +1,22 @@
+{
+  "name": "@nocobase/plugin-market-catalog",
+  "displayName": "Market catalog",
+  "displayName.zh-CN": "市场目录",
+  "description": "Publishers, catalog resources, drafts, and consumer identity mappings.",
+  "description.zh-CN": "发布者、目录资源、草稿，以及消费方身份映射。",
+  "version": "2.1.37",
+  "license": "Apache-2.0",
+  "main": "./dist/server/index.js",
+  "keywords": ["Market"],
+  "nocobase": {
+    "supportedVersions": ["2.x"],
+    "editionLevel": 0
+  },
+  "peerDependencies": {
+    "@nocobase/actions": "2.x",
+    "@nocobase/client": "2.x",
+    "@nocobase/database": "2.x",
+    "@nocobase/server": "2.x",
+    "@nocobase/test": "2.x"
+  }
+}
