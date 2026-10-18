@@ -23,6 +23,16 @@ const STRIPPED_KEYS = [
   'invalidated',
   'marketProtocolVersion',
   'schemaVersion',
+  'state',
+  'scanned',
+  'scanPassed',
+  'humanReviewed',
+  'publisherVerification',
+  'digest',
+  'passed',
+  'reviewerUserId',
+  'secretFindings',
+  'piiSignals',
 ];
 
 export type Principal = {

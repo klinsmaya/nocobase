@@ -21,6 +21,15 @@ import {
   updateResource,
 } from './actions';
 import { bindTenant } from './guard';
+import {
+  createRelease,
+  distributeRelease,
+  publishRelease,
+  replaceRelease,
+  reviewRelease,
+  revokeRelease,
+  scanRelease,
+} from './publishing';
 
 export class PluginMarketCatalogServer extends Plugin {
   async beforeLoad() {
@@ -68,6 +77,31 @@ export class PluginMarketCatalogServer extends Plugin {
       name: 'marketOwnershipEvents',
       only: ['list', 'get'],
     });
+    this.app.resourcer.define({
+      name: 'marketReleases',
+      actions: {
+        create: createRelease,
+        scan: scanRelease,
+        review: reviewRelease,
+        publish: publishRelease,
+        replace: replaceRelease,
+        revoke: revokeRelease,
+        distribute: distributeRelease,
+      },
+      only: ['list', 'get', 'create', 'scan', 'review', 'publish', 'replace', 'revoke', 'distribute'],
+    });
+    this.app.resourcer.define({
+      name: 'marketScanReports',
+      only: ['list', 'get'],
+    });
+    this.app.resourcer.define({
+      name: 'marketReviews',
+      only: ['list', 'get'],
+    });
+    this.app.resourcer.define({
+      name: 'marketAuditEvents',
+      only: ['list', 'get'],
+    });
     this.app.acl.registerSnippet({
       name: 'pm.market-catalog',
       actions: [
@@ -77,6 +111,10 @@ export class PluginMarketCatalogServer extends Plugin {
         'marketIdentityMappings:*',
         'marketPrincipals:*',
         'marketOwnershipEvents:*',
+        'marketReleases:*',
+        'marketScanReports:*',
+        'marketReviews:*',
+        'marketAuditEvents:*',
       ],
     });
   }

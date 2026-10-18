@@ -12,12 +12,16 @@ import React from 'react';
 import { NAMESPACE } from '../constants';
 import {
   CatalogPage,
+  auditEventsSchema,
   draftsSchema,
   eventsSchema,
   mappingsSchema,
   principalsSchema,
   publishersSchema,
+  releasesSchema,
   resourcesSchema,
+  reviewsSchema,
+  scanReportsSchema,
 } from './schema';
 
 function page(schema: Parameters<typeof CatalogPage>[0]['schema']) {
@@ -75,6 +79,30 @@ export class PluginMarketCatalogClient extends Plugin {
       Component: EventsPage,
       aclSnippet: 'pm.market-catalog',
       sort: 6,
+    });
+    this.app.pluginSettingsManager.add('market-catalog.releases', {
+      title: `{{t("Releases", { ns: "${NAMESPACE}" })}}`,
+      Component: page(releasesSchema),
+      aclSnippet: 'pm.market-catalog',
+      sort: 7,
+    });
+    this.app.pluginSettingsManager.add('market-catalog.scans', {
+      title: `{{t("Scan reports", { ns: "${NAMESPACE}" })}}`,
+      Component: page(scanReportsSchema),
+      aclSnippet: 'pm.market-catalog',
+      sort: 8,
+    });
+    this.app.pluginSettingsManager.add('market-catalog.reviews', {
+      title: `{{t("Reviews", { ns: "${NAMESPACE}" })}}`,
+      Component: page(reviewsSchema),
+      aclSnippet: 'pm.market-catalog',
+      sort: 9,
+    });
+    this.app.pluginSettingsManager.add('market-catalog.audit', {
+      title: `{{t("Audit events", { ns: "${NAMESPACE}" })}}`,
+      Component: page(auditEventsSchema),
+      aclSnippet: 'pm.market-catalog',
+      sort: 10,
     });
   }
 }
