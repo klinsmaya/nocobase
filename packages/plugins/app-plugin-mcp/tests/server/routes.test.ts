@@ -313,6 +313,24 @@ describe('@nocobase/app-plugin-mcp', () => {
     await client.close();
   });
 
+  it('answers GET and DELETE with 405 rather than opening a stream', async () => {
+    const application = await createApplication(allowAuthentication);
+    for (const method of ['GET', 'DELETE']) {
+      const response = await application.root.request('/api/mcp', {
+        method,
+        headers: {
+          authorization: 'Bearer token-1',
+          accept: 'application/json, text/event-stream',
+        },
+      });
+      expect(response.status).toBe(405);
+      expect(response.headers.get('allow')).toBe('POST');
+      expect(response.headers.get('content-type') ?? '').not.toContain(
+        'event-stream',
+      );
+    }
+  });
+
   it('declares one hidden API Route and stays out of the API document', async () => {
     expect(routes).toEqual([apiRoutes]);
     const application = await createApplication(allowAuthentication);

@@ -22,8 +22,16 @@ export const apiRoutes: AppApiRouteContribution<AppPluginApplication> =
     const router = new Hono();
     router.onError(apiErrorHandler);
     const { container } = app;
+    // The transport is stateless: no server-to-client stream to open with GET, no session to end with DELETE. A
+    // client told 405 does not keep reconnecting the way it does to an empty stream.
     router.on(
-      ['GET', 'POST', 'DELETE'],
+      ['GET', 'DELETE'],
+      '/mcp',
+      // The same transport as below.
+      describeRoute({ hide: true }),
+      (context) => context.body(null, 405, { allow: 'POST' }),
+    );
+    router.post(
       '/mcp',
       // A JSON-RPC transport, not an operation of the API it serves; the API document would make it a command of itself.
       describeRoute({ hide: true }),

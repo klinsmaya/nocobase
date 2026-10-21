@@ -12,7 +12,7 @@ A tool call sends the command's request through the application's own router, wi
 
 A request authenticates the way `GET /api/cli/manifest` does. When a plugin registered command-line callers (the agents plugin does, telling a person from an agent's run and attaching the business actions the caller holds), the same resolvers decide who calls and which commands they are offered. Without one, the authentication plugin's session or API key names the person; such a caller holds no business actions, so a command naming one is withheld, while every route still authorizes each request itself. An anonymous request answers `401 MCP_UNAUTHENTICATED` before any MCP exchange.
 
-The transport is stateless: no MCP session is kept between requests, and each request answers JSON rather than opening an event stream.
+The transport is stateless: no MCP session is kept between requests, each `POST` answers JSON rather than opening an event stream, and `GET` and `DELETE` answer `405` with `Allow: POST`, since there is no server-to-client stream to open and no session to end.
 
 ## Connecting a host
 
