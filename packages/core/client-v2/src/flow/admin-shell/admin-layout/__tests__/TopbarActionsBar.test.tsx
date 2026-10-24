@@ -9,7 +9,7 @@
 
 import React from 'react';
 import { fireEvent, render, screen } from '@testing-library/react';
-import { MemoryRouter, useLocation } from 'react-router-dom';
+import { MemoryRouter } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const { allowMock, appMock, flowModelRendererSpy } = vi.hoisted(() => {
@@ -17,6 +17,7 @@ const { allowMock, appMock, flowModelRendererSpy } = vi.hoisted(() => {
     allowMock: vi.fn(),
     appMock: {
       current: {
+        name: 'main',
         router: {
           getBasename: () => '/nocobase/v',
         },
@@ -86,6 +87,7 @@ describe('TopbarActionsBar helpers', () => {
     allowMock.mockReset();
     flowModelRendererSpy.mockClear();
     appMock.current = {
+      name: 'main',
       router: {
         getBasename: () => '/nocobase/v',
       },
@@ -136,6 +138,16 @@ describe('TopbarActionsBar helpers', () => {
           title: 'Plugin manager',
           path: '/admin/settings/plugin-manager',
           icon: null,
+          sort: -200,
+          componentLoader: async () => null,
+        },
+        {
+          key: 'multi-portal',
+          name: 'multi-portal',
+          title: 'Portal manager',
+          path: '/admin/settings/multi-portal',
+          icon: null,
+          sort: -300,
           componentLoader: async () => null,
         },
         {
@@ -159,13 +171,14 @@ describe('TopbarActionsBar helpers', () => {
     });
 
     expect((items as any[]).map((item) => item.type || item.key)).toEqual([
+      'multi-portal',
       'plugin-manager',
       'divider',
       'system-settings',
       'divider',
       'security',
     ]);
-    expect((items as any[])[2]).toMatchObject({
+    expect((items as any[]).find((item) => item.key === 'system-settings')).toMatchObject({
       key: 'system-settings',
       name: 'system-settings',
       path: '/admin/settings/system-settings',
@@ -191,7 +204,7 @@ describe('TopbarActionsBar helpers', () => {
     renderSettingsLabel((items as any[])[0].label, '/sales/p1');
 
     const link = screen.getByRole('link', { name: 'System settings' });
-    expect(link).toHaveAttribute('href', '/nocobase/v/admin/settings/system-settings');
+    expect(link).toHaveAttribute('href', '/nocobase/settings/system-settings');
     expect(link).toHaveAttribute('target', '_blank');
     expect(link).toHaveAttribute('rel', expect.stringContaining('noopener'));
     expect(link).toHaveAttribute('rel', expect.stringContaining('noreferrer'));
@@ -216,7 +229,7 @@ describe('TopbarActionsBar helpers', () => {
     renderSettingsLabel((items as any[])[0].label, '/sales/p1');
 
     const link = screen.getByRole('link', { name: 'Plugin manager' });
-    expect(link).toHaveAttribute('href', '/nocobase/v/admin/settings/plugin-manager');
+    expect(link).toHaveAttribute('href', '/nocobase/settings/plugin-manager');
     expect(link).toHaveAttribute('target', '_blank');
     expect(link).toHaveAttribute('rel', expect.stringContaining('noopener'));
     expect(link).toHaveAttribute('rel', expect.stringContaining('noreferrer'));
@@ -241,13 +254,13 @@ describe('TopbarActionsBar helpers', () => {
     renderSettingsLabel((items as any[])[0].label, '/apps/a_9xlild35jir/crm-amd/ekeisumx1zu');
 
     const link = screen.getByRole('link', { name: 'System settings' });
-    expect(link).toHaveAttribute('href', '/nocobase/v/apps/a_9xlild35jir/admin/settings/system-settings');
+    expect(link).toHaveAttribute('href', '/nocobase/settings/apps/a_9xlild35jir/system-settings');
     expect(link).toHaveAttribute('target', '_blank');
     expect(link).toHaveAttribute('rel', expect.stringContaining('noopener'));
     expect(link).toHaveAttribute('rel', expect.stringContaining('noreferrer'));
   });
 
-  it('should keep regular admin settings as SPA links inside admin runtime', () => {
+  it('should open regular admin settings in the standalone SPA from admin runtime', () => {
     const items = getTopbarPluginSettingsItems({
       canManagePlugins: false,
       t: (key) => key,
@@ -266,13 +279,38 @@ describe('TopbarActionsBar helpers', () => {
     renderSettingsLabel((items as any[])[0].label, '/admin/settings/routes');
 
     const link = screen.getByRole('link', { name: 'Routes' });
-    expect(link).toHaveAttribute('href', '/admin/settings/routes');
-    expect(link).not.toHaveAttribute('target', '_blank');
+    expect(link).toHaveAttribute('href', '/nocobase/settings/routes');
+    expect(link).toHaveAttribute('target', '_blank');
+    expect(link).toHaveAttribute('rel', expect.stringContaining('noopener'));
   });
 
+  it('should open sub-app settings in the standalone SPA from sub-app admin runtime', () => {
+    const items = getTopbarPluginSettingsItems({
+      canManagePlugins: false,
+      t: (key) => key,
+      settings: [
+        {
+          key: 'routes',
+          name: 'routes',
+          title: 'Routes',
+          path: '/admin/settings/routes',
+          icon: null,
+          componentLoader: async () => null,
+        },
+      ] as any,
+    });
+
+    renderSettingsLabel((items as any[])[0].label, '/apps/a_9xlild35jir/admin/settings/routes');
+
+    const link = screen.getByRole('link', { name: 'Routes' });
+    expect(link).toHaveAttribute('href', '/nocobase/settings/apps/a_9xlild35jir/routes');
+    expect(link).toHaveAttribute('target', '_blank');
+    expect(link).toHaveAttribute('rel', expect.stringContaining('noopener'));
+  });
   it.each(['/nocobase/v', '/v', '/nocobase/v/apps/jhb20'])(
-    'should navigate sub-app settings without document navigation with basename %s',
+    'should open standalone sub-app settings with basename %s',
     (basename) => {
+      appMock.current.name = 'jhb20';
       appMock.current.router.getBasename = () => basename;
       const items = getTopbarPluginSettingsItems({
         canManagePlugins: false,
@@ -293,22 +331,17 @@ describe('TopbarActionsBar helpers', () => {
         throw new Error('Expected settings menu item');
       }
       const appBase = basename.endsWith('/apps/jhb20') ? basename : `${basename}/apps/jhb20`;
-      const targetHref = `${appBase}/admin/settings/ai`;
-      const LocationDisplay = () => <output aria-label="Current route">{useLocation().pathname}</output>;
+      const targetHref = `${basename === '/v' ? '' : '/nocobase'}/settings/apps/jhb20/ai`;
       render(
         <MemoryRouter basename={basename} initialEntries={[`${appBase}/admin/a3pq1t1773a`]}>
           {item.label}
-          <LocationDisplay />
         </MemoryRouter>,
       );
 
       const link = screen.getByRole('link', { name: 'AI employees' });
       expect(link).toHaveAttribute('href', targetHref);
-      expect(link).not.toHaveAttribute('target', '_blank');
-      const click = new MouseEvent('click', { bubbles: true, cancelable: true, button: 0 });
-      fireEvent(link, click);
-      expect(click.defaultPrevented).toBe(true);
-      expect(screen.getByLabelText('Current route')).toHaveTextContent(targetHref.slice(basename.length));
+      expect(link).toHaveAttribute('target', '_blank');
+      expect(link).toHaveAttribute('rel', expect.stringContaining('noopener'));
     },
   );
 
@@ -331,11 +364,11 @@ describe('TopbarActionsBar helpers', () => {
     renderSettingsLabel((items as any[])[0].label, '/admin2/foo');
 
     const link = screen.getByRole('link', { name: 'System settings' });
-    expect(link).toHaveAttribute('href', '/nocobase/v/admin/settings/system-settings');
+    expect(link).toHaveAttribute('href', '/nocobase/settings/system-settings');
     expect(link).toHaveAttribute('target', '_blank');
   });
 
-  it('should not duplicate the basename when building new-tab settings hrefs', () => {
+  it('should remove the modern basename when building standalone settings hrefs', () => {
     const items = getTopbarPluginSettingsItems({
       canManagePlugins: false,
       t: (key) => key,
@@ -354,7 +387,30 @@ describe('TopbarActionsBar helpers', () => {
     renderSettingsLabel((items as any[])[0].label, '/sales/p1');
 
     const link = screen.getByRole('link', { name: 'System settings' });
-    expect(link).toHaveAttribute('href', '/nocobase/v/admin/settings/system-settings');
+    expect(link).toHaveAttribute('href', '/nocobase/settings/system-settings');
+  });
+
+  it('should preserve the new sub-app scope in standalone settings hrefs', () => {
+    const items = getTopbarPluginSettingsItems({
+      canManagePlugins: false,
+      t: (key) => key,
+      settings: [
+        {
+          key: 'system-settings',
+          name: 'system-settings',
+          title: 'System settings',
+          path: '/admin/settings/system-settings',
+          icon: null,
+          componentLoader: async () => null,
+        },
+      ] as any,
+    });
+
+    renderSettingsLabel((items as any[])[0].label, '/_app/a_new/admin/settings/system-settings');
+
+    const link = screen.getByRole('link', { name: 'System settings' });
+    expect(link).toHaveAttribute('href', '/nocobase/settings/_app/a_new/system-settings');
+    expect(link).toHaveAttribute('target', '_blank');
   });
 
   it('should keep external settings opening in a new tab', () => {
@@ -419,6 +475,34 @@ describe('TopbarActionsBar', () => {
 
   afterEach(() => {
     vi.restoreAllMocks();
+  });
+
+  it('should group plugin settings with Help and user center', () => {
+    render(
+      <TopbarActionsBar
+        actions={[
+          createAction({ uid: 'notification', actionId: 'notification' }),
+          createAction({ uid: 'plugin-settings', actionId: 'plugin-settings' }),
+          createAction({ uid: 'user-center', actionId: 'user-center' }),
+        ]}
+      />,
+    );
+
+    const notification = screen.getByTestId('flow-model-notification');
+    const pluginSettings = screen.getByTestId('flow-model-plugin-settings');
+    const help = screen.getByTestId('help-lite');
+    const userCenter = screen.getByTestId('flow-model-user-center');
+    const mainGroup = notification.closest('.nb-topbar-actions-list');
+    const utilityGroup = pluginSettings.closest('.nb-topbar-utility-actions-list');
+
+    expect(mainGroup).toContainElement(notification);
+    expect(mainGroup).not.toContainElement(pluginSettings);
+    expect(utilityGroup).not.toBeNull();
+    expect(utilityGroup).toContainElement(pluginSettings);
+    expect(utilityGroup).toContainElement(help);
+    expect(utilityGroup).toContainElement(userCenter);
+    expect(pluginSettings.compareDocumentPosition(help) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(help.compareDocumentPosition(userCenter) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 
   it('should keep HelpLite rendered when one action fails', () => {

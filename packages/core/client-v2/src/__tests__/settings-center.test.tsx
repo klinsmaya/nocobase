@@ -7,21 +7,17 @@
  * For more information, please refer to: https://www.nocobase.com/agreement.
  */
 
-import {
-  ACLRolesCheckProvider,
-  createMockClient,
-  NocoBaseDesktopRouteType,
-  type NocoBaseDesktopRoute,
-  Plugin,
-} from '@nocobase/client-v2';
-import { act, render, screen, waitFor, fireEvent } from '@testing-library/react';
+import { ACLRolesCheckProvider, Plugin } from '@nocobase/client-v2';
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import React from 'react';
 import { message } from 'antd';
 import { vi } from 'vitest';
 import { AdminSettingsLayoutModel as ClientV2AdminSettingsLayoutModel } from '../settings-center';
 import { AdminSettingsLayoutModel as ClientV1AdminSettingsLayoutModel } from '../../../client/src/pm/AdminSettingsLayoutModel';
-import { NocoBaseBuildInPlugin } from '../nocobase-buildin-plugin';
+import zhCN from '../../../client/src/locale/zh-CN.json';
+import { SettingsBuildInPlugin } from '../settings-app/SettingsBuildInPlugin';
 import { matchSettingsRoute, sortTopLevelSettings } from '../settings-center/utils';
+import { createMockSettingsClient } from './mockSettingsApplication';
 
 class TestAclPlugin extends Plugin {
   async load() {
@@ -29,7 +25,7 @@ class TestAclPlugin extends Plugin {
   }
 }
 
-type MockClientApplication = ReturnType<typeof createMockClient>;
+type MockClientApplication = ReturnType<typeof createMockSettingsClient>;
 
 const renderApp = async (app: MockClientApplication) => {
   const Root = app.getRootComponent();
@@ -50,17 +46,19 @@ const waitForGetRequests = async (app: MockClientApplication, urls: string[]) =>
 const mockAdminRuntime = (
   app: MockClientApplication,
   options: {
+    lang?: string;
     snippets?: string[];
     pmList?: any[];
+    resources?: Record<string, string>;
     systemSettings?: Record<string, any>;
-    desktopRoutes?: NocoBaseDesktopRoute[];
   } = {},
 ) => {
   const {
+    lang = 'en-US',
     snippets = ['pm', 'pm.system-settings.system-settings'],
     pmList = [],
+    resources = {},
     systemSettings = {},
-    desktopRoutes = [],
   } = options;
 
   app.dataSourceManager.getCollection = ((name: string, collectionName: string) => {
@@ -86,9 +84,9 @@ const mockAdminRuntime = (
   });
   app.apiMock.onGet('app:getLang').reply(200, {
     data: {
-      lang: 'en-US',
+      lang,
       resources: {
-        client: {},
+        client: resources,
       },
       cron: {},
     },
@@ -105,7 +103,7 @@ const mockAdminRuntime = (
     },
   });
   app.apiMock.onGet('/desktopRoutes:listAccessible').reply(200, {
-    data: desktopRoutes,
+    data: [],
   });
   app.apiMock.onGet('systemSettings:get').reply(200, {
     data: {
@@ -187,10 +185,10 @@ describe('settings center', () => {
     expect(sortTopLevelSettings(settings).map((item) => item.name)).toEqual(['api-keys', 'backups', 'system-settings']);
   });
 
-  it('should redirect /admin/settings to system-settings by default', async () => {
-    const app = createMockClient({
-      plugins: [NocoBaseBuildInPlugin, TestAclPlugin],
-      router: { type: 'memory', initialEntries: ['/admin/settings'] },
+  it('should redirect /settings to system-settings by default', async () => {
+    const app = createMockSettingsClient({
+      plugins: [SettingsBuildInPlugin, TestAclPlugin],
+      router: { type: 'memory', initialEntries: ['/settings'] },
     });
     mockAdminRuntime(app);
 
@@ -201,9 +199,9 @@ describe('settings center', () => {
   });
 
   it('should expose current language variable as enabled-language selector', async () => {
-    const app = createMockClient({
-      plugins: [NocoBaseBuildInPlugin, TestAclPlugin],
-      router: { type: 'memory', initialEntries: ['/admin/settings/system-settings'] },
+    const app = createMockSettingsClient({
+      plugins: [SettingsBuildInPlugin, TestAclPlugin],
+      router: { type: 'memory', initialEntries: ['/settings/system-settings'] },
     });
     mockAdminRuntime(app, {
       systemSettings: {
@@ -231,9 +229,9 @@ describe('settings center', () => {
   });
 
   it('should fallback to plugin-manager when system-settings is not allowed', async () => {
-    const app = createMockClient({
-      plugins: [NocoBaseBuildInPlugin, TestAclPlugin],
-      router: { type: 'memory', initialEntries: ['/admin/settings'] },
+    const app = createMockSettingsClient({
+      plugins: [SettingsBuildInPlugin, TestAclPlugin],
+      router: { type: 'memory', initialEntries: ['/settings'] },
     });
     mockAdminRuntime(app, {
       snippets: ['pm', '!pm.system-settings.system-settings'],
@@ -256,43 +254,54 @@ describe('settings center', () => {
     expect(await screen.findByText('Demo plugin')).toBeInTheDocument();
   });
 
-  it('should redirect to the first accessible page when the role cannot access settings', async () => {
-    const app = createMockClient({
-      plugins: [NocoBaseBuildInPlugin, TestAclPlugin],
-      router: { type: 'memory', initialEntries: ['/admin/settings/system-settings'] },
+  it('should redirect to the admin app when the role cannot access settings', async () => {
+    const originalLocation = globalThis.window.location;
+    const originalModernClientPrefix = window.__nocobase_modern_client_prefix__;
+    const replace = vi.fn();
+    Object.defineProperty(globalThis.window, 'location', {
+      configurable: true,
+      value: {
+        ...originalLocation,
+        replace,
+      },
     });
-    mockAdminRuntime(app, {
-      snippets: ['!pm', '!pm.system-settings.system-settings'],
-      desktopRoutes: [
-        {
-          id: 1,
-          schemaUid: 'first-accessible-page',
-          title: 'First accessible page',
-          type: NocoBaseDesktopRouteType.flowPage,
-        },
-        {
-          id: 2,
-          schemaUid: 'second-accessible-page',
-          title: 'Second accessible page',
-          type: NocoBaseDesktopRouteType.flowPage,
-        },
-      ],
-    });
+    window.__nocobase_modern_client_prefix__ = 'v';
 
-    await renderApp(app);
-    await waitForGetRequests(app, ['/auth:check', 'roles:check', '/desktopRoutes:listAccessible']);
+    try {
+      const app = createMockSettingsClient({
+        plugins: [SettingsBuildInPlugin, TestAclPlugin],
+        router: { type: 'memory', initialEntries: ['/settings/system-settings'] },
+      });
+      mockAdminRuntime(app, {
+        snippets: ['!pm', '!pm.system-settings.system-settings'],
+      });
 
-    await waitFor(() => {
-      expect(app.router.state.location.pathname).toBe('/admin/first-accessible-page');
-    });
-    expect(app.router.state.historyAction).toBe('REPLACE');
-    expect(screen.queryByText('Current settings page is unavailable')).not.toBeInTheDocument();
+      await renderApp(app);
+      await waitForGetRequests(app, ['/auth:check', 'roles:check']);
+
+      await waitFor(() => {
+        expect(replace).toHaveBeenCalledWith('/v/admin');
+      });
+      expect(
+        screen.queryByRole('heading', { name: 'Your current role cannot access Settings' }),
+      ).not.toBeInTheDocument();
+    } finally {
+      Object.defineProperty(globalThis.window, 'location', {
+        configurable: true,
+        value: originalLocation,
+      });
+      if (originalModernClientPrefix === undefined) {
+        delete window.__nocobase_modern_client_prefix__;
+      } else {
+        window.__nocobase_modern_client_prefix__ = originalModernClientPrefix;
+      }
+    }
   });
 
   it('should hide plugin-manager menu item when pm snippet is missing', async () => {
-    const app = createMockClient({
-      plugins: [NocoBaseBuildInPlugin, TestAclPlugin],
-      router: { type: 'memory', initialEntries: ['/admin/settings/system-settings'] },
+    const app = createMockSettingsClient({
+      plugins: [SettingsBuildInPlugin, TestAclPlugin],
+      router: { type: 'memory', initialEntries: ['/settings/system-settings'] },
     });
     mockAdminRuntime(app, {
       snippets: ['pm.system-settings.system-settings'],
@@ -306,27 +315,23 @@ describe('settings center', () => {
   });
 
   it('should show route empty state for unknown settings routes', async () => {
-    const app = createMockClient({
-      plugins: [NocoBaseBuildInPlugin, TestAclPlugin],
-      router: { type: 'memory', initialEntries: ['/admin/settings/unknown'] },
+    const app = createMockSettingsClient({
+      plugins: [SettingsBuildInPlugin, TestAclPlugin],
+      router: { type: 'memory', initialEntries: ['/settings/unknown'] },
     });
     mockAdminRuntime(app, {
       snippets: ['!pm', '!pm.system-settings.system-settings'],
-      desktopRoutes: [
-        {
-          id: 1,
-          schemaUid: 'first-accessible-page',
-          title: 'First accessible page',
-          type: NocoBaseDesktopRouteType.flowPage,
-        },
-      ],
     });
 
     await renderApp(app);
     await waitForGetRequests(app, ['/auth:check', 'roles:check']);
 
-    expect(await screen.findByText('Current settings page is unavailable')).toBeInTheDocument();
-    expect(app.router.state.location.pathname).toBe('/admin/settings/unknown');
+    const result = await screen.findByRole('status');
+    expect(within(result).getByRole('heading', { name: 'Settings page not found' })).toBeInTheDocument();
+    expect(
+      within(result).getByText('The settings page you requested does not exist or has been removed.'),
+    ).toBeInTheDocument();
+    expect(app.router.state.location.pathname).toBe('/settings/unknown');
   });
 
   it('should allow direct access to hidden page without showing menu entry', async () => {
@@ -343,27 +348,18 @@ describe('settings center', () => {
       }
     }
 
-    const app = createMockClient({
-      plugins: [NocoBaseBuildInPlugin, TestAclPlugin, HiddenSettingsPlugin],
-      router: { type: 'memory', initialEntries: ['/admin/settings/hidden-demo'] },
+    const app = createMockSettingsClient({
+      plugins: [SettingsBuildInPlugin, TestAclPlugin, HiddenSettingsPlugin],
+      router: { type: 'memory', initialEntries: ['/settings/hidden-demo'] },
     });
-    mockAdminRuntime(app, {
-      desktopRoutes: [
-        {
-          id: 1,
-          schemaUid: 'first-accessible-page',
-          title: 'First accessible page',
-          type: NocoBaseDesktopRouteType.flowPage,
-        },
-      ],
-    });
+    mockAdminRuntime(app);
 
     await renderApp(app);
     await waitForGetRequests(app, ['/auth:check', 'roles:check']);
 
     expect(await screen.findByText('Hidden settings page')).toBeInTheDocument();
     expect(screen.queryByRole('menuitem', { name: 'Hidden demo' })).not.toBeInTheDocument();
-    expect(app.router.state.location.pathname).toBe('/admin/settings/hidden-demo');
+    expect(app.router.state.location.pathname).toBe('/settings/hidden-demo');
   });
 
   it('should show route empty state when direct access page has no permission', async () => {
@@ -380,28 +376,24 @@ describe('settings center', () => {
       }
     }
 
-    const app = createMockClient({
-      plugins: [NocoBaseBuildInPlugin, TestAclPlugin, ProtectedSettingsPlugin],
-      router: { type: 'memory', initialEntries: ['/admin/settings/secure-demo'] },
+    const app = createMockSettingsClient({
+      plugins: [SettingsBuildInPlugin, TestAclPlugin, ProtectedSettingsPlugin],
+      router: { type: 'memory', initialEntries: ['/settings/secure-demo'] },
     });
     mockAdminRuntime(app, {
+      lang: 'zh-CN',
+      resources: zhCN,
       snippets: ['pm', 'pm.system-settings.system-settings', '!pm.secure-demo.index'],
-      desktopRoutes: [
-        {
-          id: 1,
-          schemaUid: 'first-accessible-page',
-          title: 'First accessible page',
-          type: NocoBaseDesktopRouteType.flowPage,
-        },
-      ],
     });
 
     await renderApp(app);
     await waitForGetRequests(app, ['/auth:check', 'roles:check']);
 
-    expect(await screen.findByText('Current settings page is unavailable')).toBeInTheDocument();
+    const result = await screen.findByRole('status');
+    expect(within(result).getByRole('heading', { name: '当前角色无权访问设置中心' })).toBeInTheDocument();
+    expect(within(result).getByText('请切换至有权限的角色，或联系管理员获取访问权限。')).toBeInTheDocument();
     expect(screen.queryByText('Secure settings page')).not.toBeInTheDocument();
-    expect(app.router.state.location.pathname).toBe('/admin/settings/secure-demo');
+    expect(app.router.state.location.pathname).toBe('/settings/secure-demo');
   });
 
   it('should redirect a denied settings tab to the first accessible tab', async () => {
@@ -437,9 +429,9 @@ describe('settings center', () => {
       }
     }
 
-    const app = createMockClient({
-      plugins: [NocoBaseBuildInPlugin, TestAclPlugin, ProtectedSettingsTabsPlugin],
-      router: { type: 'memory', initialEntries: ['/admin/settings/protected-tabs/denied'] },
+    const app = createMockSettingsClient({
+      plugins: [SettingsBuildInPlugin, TestAclPlugin, ProtectedSettingsTabsPlugin],
+      router: { type: 'memory', initialEntries: ['/settings/protected-tabs/denied'] },
     });
     mockAdminRuntime(app, {
       snippets: ['pm', '!pm.protected-tabs.denied'],
@@ -449,7 +441,7 @@ describe('settings center', () => {
     await waitForGetRequests(app, ['/auth:check', 'roles:check']);
 
     await waitFor(() => {
-      expect(app.router.router.state.location.pathname).toBe('/admin/settings/protected-tabs/z-first');
+      expect(app.router.router.state.location.pathname).toBe('/settings/protected-tabs/z-first');
     });
     expect(app.router.router.state.historyAction).toBe('REPLACE');
     expect(await screen.findByText('First accessible tab content')).toBeInTheDocument();
@@ -457,12 +449,53 @@ describe('settings center', () => {
     expect(renderDeniedTab).not.toHaveBeenCalled();
 
     await act(async () => {
-      await app.router.router.navigate('/admin/settings/protected-tabs/a-second');
+      await app.router.router.navigate('/settings/protected-tabs/a-second');
     });
 
     expect(await screen.findByText('Second accessible tab content')).toBeInTheDocument();
-    expect(app.router.router.state.location.pathname).toBe('/admin/settings/protected-tabs/a-second');
+    expect(app.router.router.state.location.pathname).toBe('/settings/protected-tabs/a-second');
   });
+
+  it.each(['/settings/fallback-access', '/settings/fallback-access/'])(
+    'should redirect a denied index page to an accessible sibling from %s',
+    async (initialEntry) => {
+      class FallbackAccessSettingsPlugin extends Plugin {
+        async load() {
+          this.pluginSettingsManager.addMenuItem({ key: 'fallback-access', title: 'Fallback access' });
+          this.pluginSettingsManager.addPageTabItem({
+            menuKey: 'fallback-access',
+            key: 'index',
+            title: 'Restricted index settings',
+            aclSnippet: 'pm.fallback-access.index',
+            Component: () => <div>Restricted index settings page</div>,
+          });
+          this.pluginSettingsManager.addPageTabItem({
+            menuKey: 'fallback-access',
+            key: 'allowed',
+            title: 'Allowed fallback settings',
+            Component: () => <div>Allowed fallback settings page</div>,
+          });
+        }
+      }
+
+      const app = createMockSettingsClient({
+        plugins: [SettingsBuildInPlugin, TestAclPlugin, FallbackAccessSettingsPlugin],
+        router: { type: 'memory', initialEntries: [initialEntry] },
+      });
+      mockAdminRuntime(app, {
+        snippets: ['pm', 'pm.system-settings.system-settings', '!pm.fallback-access.index'],
+      });
+
+      await renderApp(app);
+      await waitForGetRequests(app, ['/auth:check', 'roles:check']);
+
+      expect(await screen.findByText('Allowed fallback settings page')).toBeInTheDocument();
+      expect(
+        screen.queryByRole('heading', { name: 'Your current role cannot access Settings' }),
+      ).not.toBeInTheDocument();
+      expect(screen.queryByText('Restricted index settings page')).not.toBeInTheDocument();
+    },
+  );
 
   it('should skip an accessible dynamic tab when its route params cannot be resolved', async () => {
     class DynamicSettingsTabsPlugin extends Plugin {
@@ -495,9 +528,9 @@ describe('settings center', () => {
       }
     }
 
-    const app = createMockClient({
-      plugins: [NocoBaseBuildInPlugin, TestAclPlugin, DynamicSettingsTabsPlugin],
-      router: { type: 'memory', initialEntries: ['/admin/settings/dynamic-tabs/denied'] },
+    const app = createMockSettingsClient({
+      plugins: [SettingsBuildInPlugin, TestAclPlugin, DynamicSettingsTabsPlugin],
+      router: { type: 'memory', initialEntries: ['/settings/dynamic-tabs/denied'] },
     });
     mockAdminRuntime(app, {
       snippets: ['pm', '!pm.dynamic-tabs.denied'],
@@ -507,7 +540,7 @@ describe('settings center', () => {
     await waitForGetRequests(app, ['/auth:check', 'roles:check']);
 
     await waitFor(() => {
-      expect(app.router.router.state.location.pathname).toBe('/admin/settings/dynamic-tabs/fallback');
+      expect(app.router.router.state.location.pathname).toBe('/settings/dynamic-tabs/fallback');
     });
     expect(await screen.findByText('Static fallback tab content')).toBeInTheDocument();
   });
@@ -535,9 +568,9 @@ describe('settings center', () => {
       }
     }
 
-    const app = createMockClient({
-      plugins: [NocoBaseBuildInPlugin, TestAclPlugin, DynamicSiblingTabsPlugin],
-      router: { type: 'memory', initialEntries: ['/admin/settings/dynamic-siblings/email:primary/logs'] },
+    const app = createMockSettingsClient({
+      plugins: [SettingsBuildInPlugin, TestAclPlugin, DynamicSiblingTabsPlugin],
+      router: { type: 'memory', initialEntries: ['/settings/dynamic-siblings/email:primary/logs'] },
     });
     mockAdminRuntime(app, {
       snippets: ['pm', '!pm.dynamic-siblings.logs'],
@@ -547,7 +580,7 @@ describe('settings center', () => {
     await waitForGetRequests(app, ['/auth:check', 'roles:check']);
 
     await waitFor(() => {
-      expect(app.router.router.state.location.pathname).toBe('/admin/settings/dynamic-siblings/email:primary/channels');
+      expect(app.router.router.state.location.pathname).toBe('/settings/dynamic-siblings/email:primary/channels');
     });
     expect(await screen.findByText('Dynamic channels tab content')).toBeInTheDocument();
   });
@@ -575,9 +608,9 @@ describe('settings center', () => {
       }
     }
 
-    const app = createMockClient({
-      plugins: [NocoBaseBuildInPlugin, TestAclPlugin, HyphenatedParamTabsPlugin],
-      router: { type: 'memory', initialEntries: ['/admin/settings/hyphenated-params/email/logs'] },
+    const app = createMockSettingsClient({
+      plugins: [SettingsBuildInPlugin, TestAclPlugin, HyphenatedParamTabsPlugin],
+      router: { type: 'memory', initialEntries: ['/settings/hyphenated-params/email/logs'] },
     });
     mockAdminRuntime(app, {
       snippets: ['pm', '!pm.hyphenated-params.logs'],
@@ -587,7 +620,7 @@ describe('settings center', () => {
     await waitForGetRequests(app, ['/auth:check', 'roles:check']);
 
     await waitFor(() => {
-      expect(app.router.router.state.location.pathname).toBe('/admin/settings/hyphenated-params/email/channels');
+      expect(app.router.router.state.location.pathname).toBe('/settings/hyphenated-params/email/channels');
     });
     expect(await screen.findByText('Hyphenated channels tab content')).toBeInTheDocument();
   });
@@ -609,9 +642,9 @@ describe('settings center', () => {
       }
     }
 
-    const app = createMockClient({
-      plugins: [NocoBaseBuildInPlugin, TestAclPlugin, MenuAclPlugin],
-      router: { type: 'memory', initialEntries: ['/admin/settings/menu-acl-demo'] },
+    const app = createMockSettingsClient({
+      plugins: [SettingsBuildInPlugin, TestAclPlugin, MenuAclPlugin],
+      router: { type: 'memory', initialEntries: ['/settings/menu-acl-demo'] },
     });
     mockAdminRuntime(app, {
       snippets: ['pm', 'pm.system-settings.system-settings', '!pm.menu-acl-demo.menu'],
@@ -621,10 +654,13 @@ describe('settings center', () => {
     await waitForGetRequests(app, ['/auth:check', 'roles:check']);
 
     expect(await screen.findByText('Menu ACL child page')).toBeInTheDocument();
-    expect(screen.getByRole('menuitem', { name: 'Menu ACL Demo' })).toBeInTheDocument();
+    // The sidebar is gone; this group is reached from the "other settings" hover
+    // dropdown in the top bar. The dropdown only renders on hover, so this just
+    // checks the group entry survived (ACL did not drop the whole menu).
+    expect(screen.getByRole('menuitem', { name: 'Other settings' })).toBeInTheDocument();
   });
 
-  it('should allow the settings sidebar menu to scroll independently', async () => {
+  it('should keep rendering the active page when a group has many settings', async () => {
     class ManySettingsPlugin extends Plugin {
       async load() {
         for (let index = 0; index < 30; index += 1) {
@@ -642,9 +678,9 @@ describe('settings center', () => {
       }
     }
 
-    const app = createMockClient({
-      plugins: [NocoBaseBuildInPlugin, TestAclPlugin, ManySettingsPlugin],
-      router: { type: 'memory', initialEntries: ['/admin/settings/scroll-demo-29'] },
+    const app = createMockSettingsClient({
+      plugins: [SettingsBuildInPlugin, TestAclPlugin, ManySettingsPlugin],
+      router: { type: 'memory', initialEntries: ['/settings/scroll-demo-29'] },
     });
     mockAdminRuntime(app);
 
@@ -653,14 +689,16 @@ describe('settings center', () => {
 
     expect(await screen.findByText('Scroll demo page 29')).toBeInTheDocument();
 
-    const sidebar = screen.getByRole('menuitem', { name: 'Scroll demo 29' }).closest('.ant-layout-sider');
-    expect(sidebar).toHaveStyle({ overflowY: 'auto' });
+    // Without the sidebar there is no separate scroll area: all 30 settings live in
+    // the top bar dropdown and the page renders only the active one, so this just
+    // checks it still holds up.
+    expect(document.querySelector('.ant-layout-sider')).toBeNull();
   });
 
   it('should save system settings through systemSettings:put', async () => {
-    const app = createMockClient({
-      plugins: [NocoBaseBuildInPlugin, TestAclPlugin],
-      router: { type: 'memory', initialEntries: ['/admin/settings/system-settings'] },
+    const app = createMockSettingsClient({
+      plugins: [SettingsBuildInPlugin, TestAclPlugin],
+      router: { type: 'memory', initialEntries: ['/settings/system-settings'] },
     });
     mockAdminRuntime(app);
 
@@ -677,9 +715,9 @@ describe('settings center', () => {
   });
 
   it('should block invalid logo uploads by storage rules', async () => {
-    const app = createMockClient({
-      plugins: [NocoBaseBuildInPlugin, TestAclPlugin],
-      router: { type: 'memory', initialEntries: ['/admin/settings/system-settings'] },
+    const app = createMockSettingsClient({
+      plugins: [SettingsBuildInPlugin, TestAclPlugin],
+      router: { type: 'memory', initialEntries: ['/settings/system-settings'] },
     });
     const messageErrorSpy = vi.spyOn(message, 'error').mockImplementation(() => {
       return undefined as any;

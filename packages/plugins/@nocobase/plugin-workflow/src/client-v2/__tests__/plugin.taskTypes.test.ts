@@ -7,19 +7,13 @@
  * For more information, please refer to: https://www.nocobase.com/agreement.
  */
 
-import { createMockClient } from '@nocobase/client-v2';
-import { Outlet } from 'react-router-dom';
 import { describe, expect, it, vi } from 'vitest';
 import PluginWorkflowClientV2 from '../plugin';
 import {
   WORKFLOW_CANVAS_ROUTE_NAME,
   WORKFLOW_CANVAS_ROUTE_PATH,
-  WORKFLOW_CANVAS_SETTINGS_ROUTE_NAME,
-  WORKFLOW_CANVAS_SETTINGS_ROUTE_PATH,
   WORKFLOW_EXECUTION_ROUTE_NAME,
   WORKFLOW_EXECUTION_ROUTE_PATH,
-  WORKFLOW_EXECUTION_SETTINGS_ROUTE_NAME,
-  WORKFLOW_EXECUTION_SETTINGS_ROUTE_PATH,
   WORKFLOW_TASKS_MOBILE_ROUTE_NAME,
   WORKFLOW_TASKS_MOBILE_ROUTE_PATH,
   WORKFLOW_TASKS_ROUTE_NAME,
@@ -65,6 +59,39 @@ describe('PluginWorkflowClientV2 task type registry', () => {
     await plugin.load();
 
     expect(app.router.add).toHaveBeenCalledWith(
+      WORKFLOW_CANVAS_ROUTE_NAME,
+      expect.objectContaining({
+        path: WORKFLOW_CANVAS_ROUTE_PATH,
+        componentLoader: expect.any(Function),
+      }),
+    );
+    expect(app.router.add).toHaveBeenCalledWith(
+      WORKFLOW_EXECUTION_ROUTE_NAME,
+      expect.objectContaining({
+        path: WORKFLOW_EXECUTION_ROUTE_PATH,
+        componentLoader: expect.any(Function),
+      }),
+    );
+    expect(app.router.add).toHaveBeenCalledWith(
+      'admin.workflow.workflows.id',
+      expect.objectContaining({
+        path: '/admin/workflow/workflows/:id',
+        Component: expect.any(Function),
+      }),
+    );
+    expect(app.router.add).toHaveBeenCalledWith(
+      'admin.workflow.executions.id',
+      expect.objectContaining({
+        path: '/admin/workflow/executions/:id',
+        Component: expect.any(Function),
+      }),
+    );
+    expect(WORKFLOW_CANVAS_ROUTE_NAME).toBe('settingsDetails.workflow.workflows.id');
+    expect(WORKFLOW_CANVAS_ROUTE_PATH).toBe('/settings/workflow/workflows/:id');
+    expect(WORKFLOW_EXECUTION_ROUTE_NAME).toBe('settingsDetails.workflow.executions.id');
+    expect(WORKFLOW_EXECUTION_ROUTE_PATH).toBe('/settings/workflow/executions/:id');
+
+    expect(app.router.add).toHaveBeenCalledWith(
       WORKFLOW_TASKS_ROUTE_NAME,
       expect.objectContaining({
         path: WORKFLOW_TASKS_ROUTE_PATH,
@@ -93,39 +120,5 @@ describe('PluginWorkflowClientV2 task type registry', () => {
       'default',
       expect.any(Function),
     );
-  });
-
-  it('registers standalone and settings-compatible workflow detail routes', async () => {
-    const { app, plugin } = createPlugin();
-
-    await plugin.load();
-
-    [
-      [WORKFLOW_CANVAS_ROUTE_NAME, WORKFLOW_CANVAS_ROUTE_PATH],
-      [WORKFLOW_CANVAS_SETTINGS_ROUTE_NAME, WORKFLOW_CANVAS_SETTINGS_ROUTE_PATH],
-      [WORKFLOW_EXECUTION_ROUTE_NAME, WORKFLOW_EXECUTION_ROUTE_PATH],
-      [WORKFLOW_EXECUTION_SETTINGS_ROUTE_NAME, WORKFLOW_EXECUTION_SETTINGS_ROUTE_PATH],
-    ].forEach(([name, path]) => {
-      expect(app.router.add).toHaveBeenCalledWith(
-        name,
-        expect.objectContaining({ path, componentLoader: expect.any(Function) }),
-      );
-    });
-  });
-
-  it('matches a settings-compatible workflow URL inside the v2 basename to the canvas route', () => {
-    const app = createMockClient({ publicPath: '/v/' });
-    app.router.add('admin', { path: '/admin', Component: Outlet });
-    app.router.add('admin.settings', { path: '/admin/settings', Component: Outlet });
-    app.pluginSettingsManager.addMenuItem({ key: 'workflow', title: 'Workflow' });
-    app.pluginSettingsManager.addPageTabItem({ menuKey: 'workflow', key: 'index', title: 'Workflow' });
-    app.router.add(WORKFLOW_CANVAS_SETTINGS_ROUTE_NAME, {
-      path: WORKFLOW_CANVAS_SETTINGS_ROUTE_PATH,
-      Component: () => null,
-    });
-
-    const matches = app.router.matchRoutes('/v/admin/settings/workflow/workflows/342944512737281') || [];
-
-    expect(matches.at(-1)?.route.id).toBe(WORKFLOW_CANVAS_SETTINGS_ROUTE_NAME);
   });
 });

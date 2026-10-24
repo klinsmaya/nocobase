@@ -15,6 +15,33 @@ yarn docs build --lang=all
 yarn docs build --lang=en --check-dead-links
 ```
 
+## `DOCS_SITE_ORIGIN`
+
+The site's public origin defaults to `https://nocode.docs.nocobase.com`. It is used for canonical links, hreflang alternates, `sitemap.xml`, `robots.txt`, JSON-LD and the documentation assistant. Set `DOCS_SITE_ORIGIN` at build time to serve the site from another origin:
+
+```bash
+DOCS_SITE_ORIGIN=https://example.com yarn docs build --lang=en
+```
+
+Absolute links to `https://docs.nocobase.com/...` in the markdown content are rewritten to this origin at build time (`plugins/pluginSiteOriginLinks.ts`), so the content itself does not need to change.
+
+## Documentation AI assistant
+
+The documentation assistant calls an independent Rust backend from the `docs-ai-service` repository. The backend searches and verifies live pages of the documentation site. The assistant accepts citations on the configured site host (`DOCS_SITE_ORIGIN`) and on the legacy `docs.nocobase.com` host, and links legacy citations on the configured site origin. The documentation build does not generate a local AI index.
+
+For local Chinese development, start the backend, then restart Rspress with the backend URL defined at build time:
+
+```powershell
+Set-Location <path-to-docs-ai-service>
+cargo run
+
+Set-Location <path-to-nocobase>
+$env:DOCS_AI_API_URL = 'http://127.0.0.1:3100'
+corepack yarn --cwd docs dev --lang=cn
+```
+
+Configure the backend for the approved DeepSeek online search provider before starting it. The UI always displays server-provided official citations and renders answer text without raw HTML.
+
 ## eject `rspress components`
 
 Customize the theme by ejecting the components. After ejecting, you can find the components in `./src/components` and modify them as you like.
@@ -33,8 +60,8 @@ import { HelloModel } from '@docs/cn/flow-engine/_demos/HelloModel';
 
 Then use the demo component in the markdown file:
 
-```markdown
+````markdown
 ```tsx file="./_demos/flow-model-renderer.tsx" preview
-```
-```
 
+```
+````

@@ -7,8 +7,7 @@
  * For more information, please refer to: https://www.nocobase.com/agreement.
  */
 
-import { assign, QueryObject, transformFilter } from '@nocobase/utils';
-import { AIContextDatasource } from '../../collections/ai-context-datasource';
+import { assign, QueryObject } from '@nocobase/utils';
 import PluginAIServer from '../plugin';
 import { WorkContext, WorkContextResolveStrategy } from '../types';
 import { Context } from '@nocobase/actions';
@@ -96,11 +95,8 @@ function getTimezone(ctx: Context): string | undefined {
 
 export class AIContextDatasourceManager {
   constructor(protected plugin: PluginAIServer) {}
-  async preview(ctx: Context, options: PreviewOptions): Promise<QueryResult | null> {
-    return await this.innerQuery(ctx, { ...options, filter: options.filter ? transformFilter(options.filter) : null });
-  }
 
-  async query(ctx: Context, options: InnerQueryOptions): Promise<QueryResult | null> {
+  async query(ctx: Context, options: DatasourceQueryOptions): Promise<QueryResult | null> {
     return await this.innerQuery(ctx, { ...options, filter: options.filter });
   }
 
@@ -223,17 +219,19 @@ export class AIContextDatasourceManager {
   }
 }
 
-export type PreviewOptions = Pick<
-  AIContextDatasource,
-  'datasource' | 'collectionName' | 'fields' | 'appends' | 'filter' | 'sort' | 'limit'
-> & { offset?: number };
-
-export type QueryOptions = {
-  id: string;
+export type DatasourceQueryOptions = {
+  datasource: string;
+  collectionName: string;
+  fields?: string[];
+  appends?: string[];
+  filter?: QueryObject | null;
+  sort?: string[];
+  limit: number;
+  offset?: number;
 };
 
 export type QueryResult = {
-  options: InnerQueryOptions;
+  options: DatasourceQueryOptions;
   total: number;
   records: {
     name: string;
@@ -242,6 +240,4 @@ export type QueryResult = {
   }[][];
 };
 
-type InnerQueryOptions = Omit<PreviewOptions, 'filter'> & {
-  filter: QueryObject;
-};
+type InnerQueryOptions = DatasourceQueryOptions;
